@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PassGen — Генератор паролей</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0a;
+            --surface: #141414;
+            --surface-hover: #1a1a1a;
+            --border: #222;
+            --text: #fff;
+            --text-dim: #888;
+            --text-muted: #555;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #ef4444;
+            --radius: 8px;
+            --badge-bg: rgba(20, 20, 20, 0.8);
+        }
+
+        [data-theme="light"] {
+            --bg: #f0f2f5;
+            --surface: #ffffff;
+            --surface-hover: #e4e6eb;
+            --border: #d1d5db;
+            --text: #1a1a1a;
+            --text-dim: #65676b;
+            --text-muted: #8a8d91;
+            --badge-bg: rgba(255, 255, 255, 0.85);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        #road-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header { 
+            text-align: center; 
+            margin-bottom: 36px; 
+            position: relative;
+        }
+        
+        .theme-toggle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .theme-toggle:hover {
+            background: var(--surface-hover);
+            transform: rotate(15deg);
+        }
+
+        h1 { font-size: 2em; font-weight: 300; letter-spacing: -0.5px; margin-bottom: 6px; }
+        header p { color: var(--text-dim); font-size: 0.9em; font-weight: 300; }
+
+        /* Значок "Без рекламы" */
+        .no-ads-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--badge-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            font-size: 0.75em;
+            color: var(--text-dim);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        .no-ads-badge i { color: var(--success); font-size: 1.1em; }
+
+        @media (max-width: 768px) {
+            .no-ads-badge {
+                top: auto;
+                bottom: 16px;
+                right: 16px;
+                font-size: 0.7em;
+                padding: 8px 12px;
+            }
+            .theme-toggle {
+                position: static;
+                margin: 0 auto 16px;
+            }
+            header { display: flex; flex-direction: column; align-items: center; }
+        }
+
+        /* Табы */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 28px;
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            padding: 11px 14px;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.82em;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--text); border-bottom-color: var(--text); }
+
+        /* Панели */
+        .panel { display: none; animation: fadeIn 0.3s ease; }
+        .panel.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        .panel-title { font-size: 1.25em; font-weight: 300; margin-bottom: 4px; }
+        .panel-desc { color: var(--text-dim); font-size: 0.85em; margin-bottom: 22px; font-weight: 300; }
+
+        /* Поле пароля */
+        .password-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 70px;
+            transition: border-color 0.2s;
+        }
+        .password-box.success { border-color: var(--success); }
+        .password-text {
+            flex: 1;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 1.05em;
+            word-break: break-all;
+            line-height: 1.4;
+        }
+        .password-text.empty { color: var(--text-muted); font-family: inherit; font-size: 0.9em; font-style: italic; }
+
+        .btn-icon {
+            width: 36px; height: 36px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .btn-icon:hover { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
+        .btn-icon.copied { background: var(--success); border-color: var(--success); color: #000; }
+        .btn-icon.spin i { animation: spin 0.5s ease; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* Надёжность */
+        .strength { margin-bottom: 20px; }
+        .strength-header { display: flex; justify-content: space-between; font-size: 0.8em; margin-bottom: 6px; color: var(--text-dim); }
+        .strength-value { font-weight: 500; }
+        .strength-bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+        .strength-fill { height: 100%; width: 0%; transition: all 0.3s; }
+
+        /* Контролы */
+        .control { margin-bottom: 18px; }
+        .control-label { display: flex; justify-content: space-between; font-size: 0.85em; color: var(--text-dim); margin-bottom: 8px; }
+        .control-value { color: var(--text); font-weight: 500; }
+
+        input[type="range"] {
+            width: 100%; height: 2px;
+            background: var(--border); border-radius: 1px;
+            outline: none; -webkit-appearance: none; cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            background: var(--text); border-radius: 50%; cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 14px; height: 14px;
+            background: var(--text); border-radius: 50%; cursor: pointer; border: none;
+        }
+
+        .checkboxes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+        .checkbox {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.85em;
+        }
+        .checkbox:hover { border-color: var(--text-dim); }
+        .checkbox input { display: none; }
+        .check-mark {
+            width: 16px; height: 16px;
+            border: 1px solid var(--text-dim);
+            border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .checkbox input:checked + .check-mark { background: var(--text); border-color: var(--text); }
+        .checkbox input:checked + .check-mark::after { content: '✓'; color: #000; font-size: 10px; font-weight: bold; }
+        .checkbox.full { grid-column: 1 / -1; }
+
+        select, input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 11px 14px;
+            color: var(--text);
+            font-size: 0.9em;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+        select:focus, input[type="text"]:focus, input[type="password"]:focus, textarea:focus { border-color: var(--text-dim); }
+        select option { background: var(--surface); color: var(--text); }
+
+        .btn {
+            width: 100%;
+            padding: 13px;
+            background: var(--text);
+            color: var(--bg);
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--surface-hover); border-color: var(--text-dim); opacity: 1; }
+        .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 8px 14px; font-size: 0.8em; width: auto; }
+        .btn-danger:hover { background: var(--danger); color: #fff; opacity: 1; }
+
+        /* Пресеты */
+        .presets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .preset-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-card:hover { border-color: var(--text-dim); transform: translateY(-2px); }
+        .preset-card.active { border-color: var(--text); background: var(--surface-hover); }
+        .preset-icon { font-size: 1.5em; margin-bottom: 8px; color: var(--text-dim); }
+        .preset-name { font-size: 0.95em; margin-bottom: 4px; font-weight: 500; }
+        .preset-desc { font-size: 0.75em; color: var(--text-dim); }
+
+        /* Проверка пароля */
+        .check-result {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-top: 16px;
+            display: none;
+        }
+        .check-result.show { display: block; animation: fadeIn 0.3s ease; }
+        .check-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.88em;
+        }
+        .check-row:last-child { border-bottom: none; }
+        .check-label { color: var(--text-dim); }
+        .check-value { font-weight: 500; }
+        .check-value.good { color: var(--success); }
+        .check-value.warn { color: var(--warning); }
+        .check-value.bad { color: var(--danger); }
+
+        .issues-list {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: var(--radius);
+            font-size: 0.85em;
+        }
+        .issue-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            color: var(--text-dim);
+        }
+        .issue-item i { color: var(--warning); margin-top: 3px; }
+
+        .hibp-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: var(--radius);
+            margin-top: 12px;
+            font-size: 0.85em;
+        }
+        .hibp-status.safe { border-left: 3px solid var(--success); }
+        .hibp-status.danger { border-left: 3px solid var(--danger); }
+        .hibp-status.loading { border-left: 3px solid var(--text-dim); }
+
+        /* QR */
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+            background: #fff;
+            border-radius: var(--radius);
+            margin-top: 12px;
+        }
+        .qr-toggle {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-top: 10px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .qr-toggle:hover { border-color: var(--text-dim); color: var(--text); }
+
+        /* Мнемоника */
+        .mnemonic-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+            margin-top: 12px;
+            font-size: 0.9em;
+            line-height: 1.6;
+            color: var(--text-dim);
+            display: none;
+        }
+        .mnemonic-box.show { display: block; animation: fadeIn 0.3s ease; }
+        .mnemonic-box strong { color: var(--text); }
+
+        /* История */
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-size: 0.85em; color: var(--text-dim); }
+        .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 500px; overflow-y: auto; }
+        .history-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            transition: all 0.2s;
+        }
+        .history-item:hover { border-color: var(--text-dim); }
+        .history-item.expired { border-color: var(--danger); }
+        .history-item.expiring { border-color: var(--warning); }
+        .history-meta { flex: 1; min-width: 0; }
+        .history-type { font-size: 0.7em; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .history-password { font-family: 'SF Mono', Monaco, monospace; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .history-time { font-size: 0.7em; color: var(--text-muted); margin-top: 2px; }
+        .history-expire { font-size: 0.7em; margin-top: 3px; display: flex; align-items: center; gap: 4px; }
+        .history-expire.ok { color: var(--text-dim); }
+        .history-expire.warn { color: var(--warning); }
+        .history-expire.bad { color: var(--danger); }
+        .history-empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+
+        .expire-select { display: flex; gap: 6px; margin-bottom: 16px; }
+        .expire-btn {
+            flex: 1;
+            padding: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.78em;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .expire-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+        /* Попап */
+        .welcome-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+        .welcome-overlay.hidden { display: none; }
+        .welcome-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px 32px;
+            max-width: 440px;
+            width: 100%;
+            text-align: center;
+        }
+        .welcome-icon {
+            width: 64px; height: 64px;
+            margin: 0 auto 20px;
+            background: var(--text);
+            border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8em;
+            color: var(--bg);
+        }
+        .welcome-title { font-size: 1.6em; font-weight: 400; margin-bottom: 12px; }
+        .welcome-text { color: var(--text-dim); font-size: 0.95em; line-height: 1.6; margin-bottom: 28px; }
+        .welcome-btn {
+            padding: 14px 32px;
+            background: var(--text);
+            color: var(--bg);
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .welcome-btn:hover { opacity: 0.9; }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+            50% { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); }
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 32px; left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 12px 20px;
+            border-radius: var(--radius);
+            font-size: 0.85em;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        @media (max-width: 600px) {
+            .container { padding: 24px 16px; }
+            .checkboxes, .presets-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 1.6em; }
+            .welcome-box { padding: 28px 20px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="road-canvas"></canvas>
+
+    <!-- Значок без рекламы -->
+    <div class="no-ads-badge">
+        <i class="fa-solid fa-shield-halved"></i>
+        <div>
+            Спасибо, что выбрали нас.<br>
+            <strong>У нас нет рекламы.</strong>
+        </div>
+    </div>
+
+    <!-- Приветственный попап -->
+    <div class="welcome-overlay" id="welcome">
+        <div class="welcome-box">
+            <div class="welcome-icon"><i class="fa-solid fa-shield-halved"></i></div>
+            <h2 class="welcome-title">Привет!</h2>
+            <p class="welcome-text">
+                Тут можешь генерировать разные типы паролей, проверять их надёжность и узнавать, не попали ли они в утечки.
+                <br><br>
+                Спасибо, что выбрали нас!
+            </p>
+            <button class="welcome-btn" onclick="closeWelcome()">Продолжить</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <header>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Сменить тему">
+                <i class="fa-solid fa-sun" id="theme-icon"></i>
+            </button>
+            <h1>PassGen</h1>
+            <p>Генератор и проверка паролей</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="quick">Быстрый</button>
+            <button class="tab" data-tab="phrase">Запоминающийся</button>
+            <button class="tab" data-tab="presets">Пресеты</button>
+            <button class="tab" data-tab="check">Проверка</button>
+            <button class="tab" data-tab="history">История</button>
+        </div>
+
+        <!-- БЫСТРЫЙ -->
+        <div class="panel active" id="panel-quick">
+            <h2 class="panel-title">Быстрый пароль</h2>
+            <p class="panel-desc">Случайная комбинация символов</p>
+
+            <div class="password-box" id="quick-output">
+                <div class="password-text empty" id="quick-password">Нажмите «Сгенерировать»</div>
+                <button class="btn-icon" onclick="refreshQuick()" title="Обновить"><i class="fa-solid fa-rotate"></i></button>
+                <button class="btn-icon" onclick="copyPassword('quick')" title="Копировать"><i class="fa-regular fa-copy"></i></button>
+            </div>
+
+            <button class="qr-toggle" onclick="toggleQR('quick')"><i class="fa-solid fa-qrcode"></i> Показать QR-код</button>
+            <div class="qr-container" id="qr-quick" style="display:none;"></div>
+
+            <button class="qr-toggle" onclick="toggleMnemonic('quick')"><i class="fa-solid fa-brain"></i> Мнемоническая подсказка</button>
+            <div class="mnemonic-box" id="mnemonic-quick"></div>
+
+            <div class="strength" style="margin-top: 16px;">
+                <div class="strength-header">
+                    <span>Надёжность</span>
+                    <span class="strength-value" id="strength-text">—</span>
+                </div>
+                <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+            </div>
+
+            <div class="control">
+                <div class="control-label"><span>Длина</span><span class="control-value" id="length-value">16</span></div>
+                <input type="range" id="length-slider" min="4" max="64" value="16">
+            </div>
+
+            <div class="checkboxes">
+                <label class="checkbox"><input type="checkbox" id="opt-upper" checked><span class="check-mark"></span><span>A-Z</span></label>
+                <label class="checkbox"><input type="checkbox" id="opt-lower" checked><span class="check-mark"></span><span>a-z</span></label>
+                <label class="checkbox"><input type="checkbox" id="opt-digits" checked><span class="check-mark"></span><span>0-9</span></label>
+                <label class="checkbox"><input type="checkbox" id="opt-symbols" checked><span class="check-mark"></span><span>!@#$</span></label>
+                <label class="checkbox full"><input type="checkbox" id="opt-exclude"><span class="check-mark"></span><span>Исключить похожие (i, l, 1, L, o, 0, O)</span></label>
+            </div>
+
+            <div class="control">
+                <div class="control-label"><span>Сменить через</span></div>
+                <div class="expire-select" id="expire-quick">
+                    <button class="expire-btn" data-days="30">30 дней</button>
+                    <button class="expire-btn active" data-days="90">90 дней</button>
+                    <button class="expire-btn" data-days="180">180 дней</button>
+                    <button class="expire-btn" data-days="0">Бессрочно</button>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generateQuick()">Сгенерировать</button>
+        </div>
+
+        <!-- ЗАПОМИНАЮЩИЙСЯ -->
+        <div class="panel" id="panel-phrase">
+            <h2 class="panel-title">Запоминающийся пароль</h2>
+            <p class="panel-desc">Пароль из нескольких слов</p>
+
+            <div class="password-box" id="phrase-output">
+                <div class="password-text empty" id="phrase-password">Нажмите «Сгенерировать»</div>
+                <button class="btn-icon" onclick="refreshPhrase()"><i class="fa-solid fa-rotate"></i></button>
+                <button class="btn-icon" onclick="copyPassword('phrase')"><i class="fa-regular fa-copy"></i></button>
+            </div>
+
+            <button class="qr-toggle" onclick="toggleQR('phrase')"><i class="fa-solid fa-qrcode"></i> Показать QR-код</button>
+            <div class="qr-container" id="qr-phrase" style="display:none;"></div>
+
+            <button class="qr-toggle" onclick="toggleMnemonic('phrase')"><i class="fa-solid fa-brain"></i> Мнемоническая подсказка</button>
+            <div class="mnemonic-box" id="mnemonic-phrase"></div>
+
+            <div class="control" style="margin-top: 16px;">
+                <div class="control-label"><span>Количество слов</span><span class="control-value" id="words-count-value">4</span></div>
+                <input type="range" id="words-count" min="3" max="8" value="4">
+            </div>
+
+            <div class="control">
+                <div class="control-label"><span>Разделитель</span></div>
+                <select id="phrase-sep">
+                    <option value="-">Дефис</option>
+                    <option value="_">Подчёркивание</option>
+                    <option value=".">Точка</option>
+                    <option value="+">Плюс</option>
+                    <option value=" ">Пробел</option>
+                </select>
+            </div>
+
+            <div class="checkboxes">
+                <label class="checkbox"><input type="checkbox" id="phrase-cap" checked><span class="check-mark"></span><span>С заглавной</span></label>
+                <label class="checkbox"><input type="checkbox" id="phrase-num" checked><span class="check-mark"></span><span>Цифра в конце</span></label>
+            </div>
+
+            <div class="control">
+                <div class="control-label"><span>Сменить через</span></div>
+                <div class="expire-select" id="expire-phrase">
+                    <button class="expire-btn" data-days="30">30 дней</button>
+                    <button class="expire-btn active" data-days="90">90 дней</button>
+                    <button class="expire-btn" data-days="180">180 дней</button>
+                    <button class="expire-btn" data-days="0">Бессрочно</button>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generatePhrase()">Сгенерировать</button>
+        </div>
+
+        <!-- ПРЕСЕТЫ -->
+        <div class="panel" id="panel-presets">
+            <h2 class="panel-title">Пресеты</h2>
+            <p class="panel-desc">Готовые шаблоны для разных задач</p>
+
+            <div class="presets-grid">
+                <div class="preset-card active" data-preset="pin" onclick="selectPreset('pin')">
+                    <div class="preset-icon"><i class="fa-solid fa-keypad"></i></div>
+                    <div class="preset-name">PIN-код</div>
+                    <div class="preset-desc">4-8 цифр</div>
+                </div>
+                <div class="preset-card" data-preset="wifi" onclick="selectPreset('wifi')">
+                    <div class="preset-icon"><i class="fa-solid fa-wifi"></i></div>
+                    <div class="preset-name">Wi-Fi</div>
+                    <div class="preset-desc">WPA2, 16+ символов</div>
+                </div>
+                <div class="preset-card" data-preset="api" onclick="selectPreset('api')">
+                    <div class="preset-icon"><i class="fa-solid fa-code"></i></div>
+                    <div class="preset-name">API-ключ</div>
+                    <div class="preset-desc">Hex-строка</div>
+                </div>
+                <div class="preset-card" data-preset="recovery" onclick="selectPreset('recovery')">
+                    <div class="preset-icon"><i class="fa-solid fa-seedling"></i></div>
+                    <div class="preset-name">Фраза</div>
+                    <div class="preset-desc">12 слов (крипто)</div>
+                </div>
+            </div>
+
+            <div class="password-box" id="preset-output">
+                <div class="password-text empty" id="preset-password">Выберите пресет и нажмите «Сгенерировать»</div>
+                <button class="btn-icon" onclick="refreshPreset()"><i class="fa-solid fa-rotate"></i></button>
+                <button class="btn-icon" onclick="copyPassword('preset')"><i class="fa-regular fa-copy"></i></button>
+            </div>
+
+            <button class="qr-toggle" onclick="toggleQR('preset')"><i class="fa-solid fa-qrcode"></i> Показать QR-код</button>
+            <div class="qr-container" id="qr-preset" style="display:none;"></div>
+
+            <div class="control" style="margin-top: 12px;">
+                <div class="control-label"><span>Сменить через</span></div>
+                <div class="expire-select" id="expire-preset">
+                    <button class="expire-btn" data-days="30">30 дней</button>
+                    <button class="expire-btn active" data-days="90">90 дней</button>
+                    <button class="expire-btn" data-days="180">180 дней</button>
+                    <button class="expire-btn" data-days="0">Бессрочно</button>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generatePreset()">Сгенерировать</button>
+        </div>
+
+        <!-- ПРОВЕРКА -->
+        <div class="panel" id="panel-check">
+            <h2 class="panel-title">Проверка пароля</h2>
+            <p class="panel-desc">Оцени надёжность и проверь на утечки</p>
+
+            <div class="control">
+                <div class="control-label"><span>Введите пароль для проверки</span></div>
+                <div style="position: relative;">
+                    <input type="password" id="check-input" placeholder="Ваш пароль" autocomplete="off">
+                    <button class="btn-icon" onclick="toggleCheckVisibility()" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%);">
+                        <i class="fa-regular fa-eye" id="check-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+                <button class="btn" onclick="analyzePassword()" style="flex: 1;">Проанализировать</button>
+                <button class="btn btn-secondary" onclick="checkHIBP()" style="flex: 1;">Проверить в утечках</button>
+            </div>
+
+            <div class="check-result" id="check-result">
+                <div class="check-row">
+                    <span class="check-label">Длина</span>
+                    <span class="check-value" id="check-length">—</span>
+                </div>
+                <div class="check-row">
+                    <span class="check-label">Энтропия</span>
+                    <span class="check-value" id="check-entropy">—</span>
+                </div>
+                <div class="check-row">
+                    <span class="check-label">Время взлома</span>
+                    <span class="check-value" id="check-time">—</span>
+                </div>
+                <div class="check-row">
+                    <span class="check-label">Оценка</span>
+                    <span class="check-value" id="check-score">—</span>
+                </div>
+                <div class="issues-list" id="check-issues" style="display:none;"></div>
+                <div class="hibp-status loading" id="hibp-status" style="display:none;">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span id="hibp-text">Проверка...</span>
+                </div>
+            </div>
+
+            <p style="font-size: 0.75em; color: var(--text-muted); margin-top: 16px; line-height: 1.5;">
+                <i class="fa-solid fa-lock"></i> Пароль проверяется локально. Для проверки утечек отправляется только первые 5 символов SHA-1 хэша.
+            </p>
+        </div>
+
+        <!-- ИСТОРИЯ -->
+        <div class="panel" id="panel-history">
+            <h2 class="panel-title">История</h2>
+            <p class="panel-desc">Последние сгенерированные пароли</p>
+
+            <div class="history-header">
+                <span id="history-count">0 записей</span>
+                <button class="btn-danger" onclick="clearHistory()">Очистить</button>
+            </div>
+
+            <div class="history-list" id="history-list">
+                <div class="history-empty">История пуста</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Скопировано</div>
+
+    <script>
+        /* ============================================================
+           ТЕМА И АНИМАЦИЯ ФОНА (ШОССЕ, НЕБОСКРЁБЫ, ДОЖДЬ)
+           ============================================================ */
+        let isLightTheme = false;
+        const roadCanvas = document.getElementById('road-canvas');
+        const rctx = roadCanvas.getContext('2d');
+        let roadW, roadH, roadY, roadHeight;
+        let cars = [];
+        let rainDrops = [];
+        let roadOffset = 0;
+        let trafficLight = 'green';
+        let trafficTimer = 0;
+        const TRAFFIC_CYCLE = { green: 240, yellow: 40, red: 200 };
+
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('theme-icon');
+            if (body.getAttribute('data-theme') === 'light') {
+                body.removeAttribute('data-theme');
+                icon.className = 'fa-solid fa-sun';
+                isLightTheme = false;
+                localStorage.setItem('passgen_theme', 'dark');
+            } else {
+                body.setAttribute('data-theme', 'light');
+                icon.className = 'fa-solid fa-moon';
+                isLightTheme = true;
+                localStorage.setItem('passgen_theme', 'light');
+            }
+            initRain(); // Пересоздаём капли для новой прозрачности
+        }
+
+        function resizeRoad() {
+            roadCanvas.width = window.innerWidth;
+            roadCanvas.height = window.innerHeight;
+            roadW = roadCanvas.width;
+            roadH = roadCanvas.height;
+            roadHeight = Math.min(260, roadH * 0.3);
+            roadY = roadH * 0.65;
+            initCars();
+            initRain();
+        }
+
+        function initCars() {
+            cars = [];
+            const lanes = [roadY + 40, roadY + roadHeight - 70];
+            const directions = [1, -1];
+            const count = Math.max(4, Math.floor(roadW / 180));
+
+            for (let i = 0; i < count; i++) {
+                const lane = i % 2;
+                cars.push({
+                    x: Math.random() * roadW,
+                    y: lanes[lane],
+                    w: 50 + Math.random() * 25,
+                    h: 24,
+                    dir: directions[lane],
+                    speed: 1.2 + Math.random() * 1.2,
+                    baseSpeed: 1.2 + Math.random() * 1.2,
+                    color: ['#ef4444', '#3b82f6', '#fbbf24', '#4ade80', '#a855f7', '#f97316', '#e5e7eb'][Math.floor(Math.random() * 7)],
+                    stopped: false
+                });
+            }
+        }
+
+        function initRain() {
+            rainDrops = [];
+            const count = Math.floor(roadW / 4);
+            for(let i = 0; i < count; i++) {
+                rainDrops.push({
+                    x: Math.random() * roadW,
+                    y: Math.random() * roadH,
+                    len: Math.random() * 15 + 8,
+                    speed: Math.random() * 6 + 10,
+                    opacity: isLightTheme ? 0.15 : 0.35
+                });
+            }
+        }
+
+        function getTrafficLightX() { return roadW * 0.5; }
+
+        function drawRoad() {
+            rctx.clearRect(0, 0, roadW, roadH);
+
+            // Небо (Закат или День)
+            const skyGrad = rctx.createLinearGradient(0, 0, 0, roadY);
+            if (isLightTheme) {
+                skyGrad.addColorStop(0, '#87CEEB');      // Голубой
+                skyGrad.addColorStop(0.6, '#B0E0E6');    // Светло-голубой
+                skyGrad.addColorStop(1, '#FFE4B5');      // Дымчатый закат у горизонта
+            } else {
+                skyGrad.addColorStop(0, '#0f0c29');      // Глубокий фиолетовый
+                skyGrad.addColorStop(0.5, '#302b63');    // Фиолетовый
+                skyGrad.addColorStop(1, '#ff512f');      // Оранжевый закат
+            }
+            rctx.fillStyle = skyGrad;
+            rctx.fillRect(0, 0, roadW, roadY);
+
+            // Горизонт — огромные небоскрёбы
+            rctx.fillStyle = isLightTheme ? '#2c3e50' : '#0a0a0a';
+            const buildings = 12; // Меньше зданий, но они огромные
+            for (let i = 0; i < buildings; i++) {
+                const bx = (i / buildings) * roadW;
+                const bw = (roadW / buildings) * 1.3; // Широкие
+                // Высота: база 120 + вариации до 250px
+                const bh = 120 + Math.sin(i * 1.2) * 90 + Math.cos(i * 0.7) * 70;
+                rctx.fillRect(bx - 5, roadY - bh, bw, bh);
+                
+                // Окна (только в тёмной теме)
+                if (!isLightTheme) {
+                    rctx.fillStyle = 'rgba(255, 220, 100, 0.35)';
+                    for (let wy = roadY - bh + 10; wy < roadY - 10; wy += 12) {
+                        for (let wx = bx + 5; wx < bx + bw - 10; wx += 10) {
+                            if (Math.random() > 0.4) rctx.fillRect(wx, wy, 4, 6);
+                        }
+                    }
+                    rctx.fillStyle = '#0a0a0a'; // Сброс
+                }
+            }
+
+            // Земля под дорогой
+            rctx.fillStyle = isLightTheme ? '#e2e8f0' : '#0f0f0f';
+            rctx.fillRect(0, roadY + roadHeight, roadW, roadH - roadY - roadHeight);
+
+            // Дорога
+            rctx.fillStyle = isLightTheme ? '#334155' : '#1a1a1a';
+            rctx.fillRect(0, roadY, roadW, roadHeight);
+
+            // Обочины
+            rctx.fillStyle = isLightTheme ? '#475569' : '#2a2a2a';
+            rctx.fillRect(0, roadY, roadW, 4);
+            rctx.fillRect(0, roadY + roadHeight - 4, roadW, 4);
+
+            // Разметка
+            rctx.strokeStyle = isLightTheme ? '#f8fafc' : '#fbbf24';
+            rctx.lineWidth = 2;
+            rctx.setLineDash([30, 20]);
+            rctx.lineDashOffset = -roadOffset;
+            rctx.beginPath();
+            rctx.moveTo(0, roadY + roadHeight / 2);
+            rctx.lineTo(roadW, roadY + roadHeight / 2);
+            rctx.stroke();
+            rctx.setLineDash([]);
+
+            drawTrafficLight();
+            cars.forEach(car => drawCar(car));
+            drawRain();
+        }
+
+        function drawTrafficLight() {
+            const x = getTrafficLightX();
+            const y = roadY - 90;
+            rctx.fillStyle = isLightTheme ? '#475569' : '#2a2a2a';
+            rctx.fillRect(x - 4, y + 50, 8, 90);
+            rctx.fillStyle = '#111';
+            rctx.fillRect(x - 16, y, 32, 54);
+            rctx.strokeStyle = '#333';
+            rctx.lineWidth = 1;
+            rctx.strokeRect(x - 16, y, 32, 54);
+
+            const lights = [
+                { color: '#ef4444', y: y + 10, active: trafficLight === 'red' },
+                { color: '#fbbf24', y: y + 27, active: trafficLight === 'yellow' },
+                { color: '#4ade80', y: y + 44, active: trafficLight === 'green' }
+            ];
+            lights.forEach(l => {
+                rctx.beginPath();
+                rctx.arc(x, l.y, 7, 0, Math.PI * 2);
+                if (l.active) {
+                    rctx.fillStyle = l.color;
+                    rctx.shadowColor = l.color;
+                    rctx.shadowBlur = 20;
+                } else {
+                    rctx.fillStyle = '#222';
+                    rctx.shadowBlur = 0;
+                }
+                rctx.fill();
+                rctx.shadowBlur = 0;
+            });
+        }
+
+        function drawCar(car) {
+            const x = car.x, y = car.y;
+            rctx.fillStyle = 'rgba(0,0,0,0.3)';
+            rctx.fillRect(x + 3, y + car.h - 2, car.w, 5);
+            rctx.fillStyle = car.color;
+            rctx.fillRect(x, y, car.w, car.h);
+            rctx.fillStyle = 'rgba(0,0,0,0.2)';
+            rctx.fillRect(x + car.w * 0.25, y - 7, car.w * 0.5, 7);
+            rctx.fillStyle = isLightTheme ? 'rgba(200, 230, 255, 0.7)' : 'rgba(150, 200, 255, 0.5)';
+            rctx.fillRect(x + car.w * 0.28, y - 5, car.w * 0.2, 5);
+            rctx.fillRect(x + car.w * 0.52, y - 5, car.w * 0.2, 5);
+            rctx.fillStyle = '#000';
+            rctx.beginPath();
+            rctx.arc(x + car.w * 0.22, y + car.h, 5, 0, Math.PI * 2);
+            rctx.arc(x + car.w * 0.78, y + car.h, 5, 0, Math.PI * 2);
+            rctx.fill();
+            
+            if (car.dir === 1) {
+                rctx.fillStyle = '#fef3c7';
+                rctx.fillRect(x + car.w - 2, y + 5, 2, 4);
+                rctx.fillRect(x + car.w - 2, y + car.h - 9, 2, 4);
+            } else {
+                rctx.fillStyle = '#ef4444';
+                rctx.fillRect(x, y + 5, 2, 4);
+                rctx.fillRect(x, y + car.h - 9, 2, 4);
+            }
+        }
+
+        function drawRain() {
+            rctx.strokeStyle = isLightTheme ? '#94a3b8' : '#ffffff';
+            rctx.lineWidth = 1;
+            rainDrops.forEach(drop => {
+                rctx.globalAlpha = drop.opacity;
+                rctx.beginPath();
+                rctx.moveTo(drop.x, drop.y);
+                rctx.lineTo(drop.x - 1.5, drop.y + drop.len); // Лёгкий ветер
+                rctx.stroke();
+                drop.y += drop.speed;
+                drop.x -= 0.8;
+                if (drop.y > roadH) {
+                    drop.y = -drop.len;
+                    drop.x = Math.random() * roadW;
+                }
+            });
+            rctx.globalAlpha = 1.0;
+        }
+
+        function updateTraffic() {
+            trafficTimer++;
+            const cycle = TRAFFIC_CYCLE[trafficLight];
+            if (trafficTimer >= cycle) {
+                trafficTimer = 0;
+                if (trafficLight === 'green') trafficLight = 'yellow';
+                else if (trafficLight === 'yellow') trafficLight = 'red';
+                else trafficLight = 'green';
+            }
+
+            const stopLine = getTrafficLightX();
+            const shouldStop = trafficLight === 'red' || trafficLight === 'yellow';
+
+            cars.forEach(car => {
+                let mustStop = false;
+                if (shouldStop) {
+                    if (car.dir === 1) {
+                        if (car.x + car.w < stopLine - 10 && car.x + car.w > stopLine - 120) mustStop = true;
+                    } else {
+                        if (car.x > stopLine + 10 && car.x < stopLine + 120) mustStop = true;
+                    }
+                }
+                cars.forEach(other => {
+                    if (other === car || other.y !== car.y) return;
+                    if (car.dir === 1) {
+                        if (other.x > car.x && other.x - (car.x + car.w) < 25) {
+                            if (other.stopped || other.speed < car.speed) mustStop = true;
+                        }
+                    } else {
+                        if (other.x < car.x && (other.x + other.w) - car.x > -25) {
+                            if (other.stopped || other.speed < car.speed) mustStop = true;
+                        }
+                    }
+                });
+
+                if (mustStop) {
+                    car.stopped = true;
+                    car.speed = Math.max(0, car.speed - 0.1);
+                } else {
+                    car.stopped = false;
+                    car.speed = Math.min(car.baseSpeed, car.speed + 0.05);
+                }
+                car.x += car.speed * car.dir;
+
+                if (car.dir === 1 && car.x > roadW + 100) car.x = -car.w - Math.random() * 100;
+                if (car.dir === -1 && car.x + car.w < -100) car.x = roadW + Math.random() * 100;
+            });
+
+            if (trafficLight === 'green') roadOffset = (roadOffset + 2.5) % 50;
+        }
+
+        function animateRoad() {
+            updateTraffic();
+            drawRoad();
+            requestAnimationFrame(animateRoad);
+        }
+
+        window.addEventListener('resize', resizeRoad);
+        
+        // Загрузка темы
+        if (localStorage.getItem('passgen_theme') === 'light') {
+            toggleTheme();
+        }
+        
+        resizeRoad();
+        animateRoad();
+
+        /* ============================================================
+           ОСНОВНАЯ ЛОГИКА ПРИЛОЖЕНИЯ
+           ============================================================ */
+        function closeWelcome() {
+            document.getElementById('welcome').classList.add('hidden');
+            try { localStorage.setItem('passgen_welcomed', '1'); } catch(e) {}
+        }
+        try {
+            if (localStorage.getItem('passgen_welcomed') === '1') {
+                document.getElementById('welcome').classList.add('hidden');
+            }
+        } catch(e) {}
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+                if (tab.dataset.tab === 'history') renderHistory();
+            });
+        });
+
+        const UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const LOWER = 'abcdefghijklmnopqrstuvwxyz';
+        const DIGITS = '0123456789';
+        const SYMBOLS = '!@#$%^&*';
+        const HEX = '0123456789abcdef';
+        const SIMILAR = 'il1Lo0O';
+
+        const WORD_LIST = [
+            'apple','arrow','aurora','breeze','canyon','castle','cedar','cipher','cloud',
+            'comet','coral','crystal','dawn','delta','drift','eagle','ember','falcon',
+            'fjord','flame','forest','frost','galaxy','glacier','globe','granite','harbor',
+            'harmony','haven','horizon','iris','ivory','jungle','karma','lagoon','lantern',
+            'liberty','lotus','lunar','maple','marble','meadow','meteor','mirage','nebula',
+            'oasis','ocean','opal','orbit','orchid','palm','pearl','phoenix','pine',
+            'planet','prism','quartz','raven','ridge','river','sage','sapphire','shadow',
+            'shore','sierra','silver','sky','solar','sparrow','star','stone','storm',
+            'summit','sunset','tempest','thunder','tiger','timber','topaz','tower','tulip',
+            'twilight','valley','velvet','violet','volcano','wander','willow','winter',
+            'zenith','zephyr','amber','anchor','atlas','azure','basil','beacon','birch',
+            'blaze','bloom','brooke','cinder','clover','cobalt','cosmos','crest'
+        ];
+
+        const MNEMONIC_WORDS = {
+            'a':'яблоко','b':'медведь','c':'кошка','d':'дом','e':'ель','f':'огонь',
+            'g':'гриб','h':'дом','i':'игла','j':'жук','k':'кот','l':'луна',
+            'm':'море','n':'ночь','o':'облако','p':'птица','q':'queen','r':'река',
+            's':'солнце','t':'тигр','u':'утро','v':'ветер','w':'вода','x':'ксенон',
+            'y':'ягода','z':'зебра',
+            '0':'солнце','1':'копьё','2':'лебедь','3':'уши','4':'парус',
+            '5':'крючок','6':'замок','7':'коса','8':'снеговик','9':'шар',
+            '!':'восклицание','@':'собака','#':'решетка','$':'доллар','%':'процент',
+            '^':'крыша','&':'и','*':'звезда'
+        };
+
+        const state = {
+            currentPassword: { quick: '', phrase: '', preset: '' },
+            currentExpire: { quick: 90, phrase: 90, preset: 90 },
+            history: [],
+            currentPreset: 'pin'
+        };
+
+        function shuffle(str) {
+            const arr = str.split('');
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr.join('');
+        }
+
+        function randChar(str) { return str[Math.floor(Math.random() * str.length)]; }
+
+        function getCharPool() {
+            let pool = '';
+            const required = [];
+            const exclude = document.getElementById('opt-exclude').checked;
+            const filter = (str) => exclude ? str.split('').filter(c => !SIMILAR.includes(c)).join('') : str;
+
+            if (document.getElementById('opt-upper').checked) {
+                const s = filter(UPPER); pool += s; if (s) required.push(randChar(s));
+            }
+            if (document.getElementById('opt-lower').checked) {
+                const s = filter(LOWER); pool += s; if (s) required.push(randChar(s));
+            }
+            if (document.getElementById('opt-digits').checked) {
+                const s = filter(DIGITS); pool += s; if (s) required.push(randChar(s));
+            }
+            if (document.getElementById('opt-symbols').checked) {
+                pool += SYMBOLS; required.push(randChar(SYMBOLS));
+            }
+            return { pool, required };
+        }
+
+        document.querySelectorAll('.expire-select').forEach(group => {
+            group.querySelectorAll('.expire-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    group.querySelectorAll('.expire-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const panelId = group.id.replace('expire-', '');
+                    state.currentExpire[panelId] = parseInt(btn.dataset.days);
+                });
+            });
+        });
+
+        const lengthSlider = document.getElementById('length-slider');
+        const lengthValue = document.getElementById('length-value');
+        lengthSlider.addEventListener('input', () => { lengthValue.textContent = lengthSlider.value; });
+
+        function generateQuick() {
+            const { pool, required } = getCharPool();
+            if (!pool) { showToast('Выберите хотя бы один тип символов'); return; }
+            const length = parseInt(lengthSlider.value);
+            let chars = [...required];
+            while (chars.length < length) chars.push(randChar(pool));
+            const password = shuffle(chars.slice(0, length).join(''));
+            state.currentPassword.quick = password;
+            displayPassword('quick', password);
+            updateStrength(password);
+            addToHistory('Быстрый', password, state.currentExpire.quick);
+            hideQR('quick'); hideMnemonic('quick');
+        }
+
+        function refreshQuick() {
+            const btn = event.currentTarget;
+            btn.classList.add('spin');
+            setTimeout(() => btn.classList.remove('spin'), 500);
+            generateQuick();
+        }
+
+        function updateStrength(password) {
+            let score = 0;
+            if (password.length >= 8) score++;
+            if (password.length >= 12) score++;
+            if (password.length >= 16) score++;
+            if (/[a-z]/.test(password)) score++;
+            if (/[A-Z]/.test(password)) score++;
+            if (/[0-9]/.test(password)) score++;
+            if (/[^a-zA-Z0-9]/.test(password)) score++;
+            const percent = Math.min(100, (score / 7) * 100);
+            const fill = document.getElementById('strength-fill');
+            const text = document.getElementById('strength-text');
+            let color, label;
+            if (percent < 35) { color = 'var(--danger)'; label = 'Слабый'; }
+            else if (percent < 60) { color = 'var(--warning)'; label = 'Средний'; }
+            else if (percent < 85) { color = '#60a5fa'; label = 'Хороший'; }
+            else { color = 'var(--success)'; label = 'Надёжный'; }
+            fill.style.width = percent + '%';
+            fill.style.background = color;
+            text.textContent = label;
+            text.style.color = color;
+        }
+
+        const wordsCountSlider = document.getElementById('words-count');
+        const wordsCountValue = document.getElementById('words-count-value');
+        wordsCountSlider.addEventListener('input', () => { wordsCountValue.textContent = wordsCountSlider.value; });
+
+        function generatePhrase() {
+            const count = parseInt(wordsCountSlider.value);
+            const sep = document.getElementById('phrase-sep').value;
+            const capitalize = document.getElementById('phrase-cap').checked;
+            const addNum = document.getElementById('phrase-num').checked;
+            const words = [];
+            for (let i = 0; i < count; i++) {
+                let w = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+                if (capitalize) w = w.charAt(0).toUpperCase() + w.slice(1);
+                words.push(w);
+            }
+            let password = words.join(sep);
+            if (addNum) password += sep + Math.floor(Math.random() * 900 + 100);
+            state.currentPassword.phrase = password;
+            displayPassword('phrase', password);
+            updateStrength(password);
+            addToHistory('Запоминающийся', password, state.currentExpire.phrase);
+            hideQR('phrase'); hideMnemonic('phrase');
+        }
+
+        function refreshPhrase() {
+            const btn = event.currentTarget;
+            btn.classList.add('spin');
+            setTimeout(() => btn.classList.remove('spin'), 500);
+            generatePhrase();
+        }
+
+        function selectPreset(preset) {
+            state.currentPreset = preset;
+            document.querySelectorAll('.preset-card').forEach(c => c.classList.toggle('active', c.dataset.preset === preset));
+        }
+
+        function generatePreset() {
+            let password = '';
+            const preset = state.currentPreset;
+            if (preset === 'pin') {
+                const len = 4 + Math.floor(Math.random() * 5);
+                for (let i = 0; i < len; i++) password += randChar(DIGITS);
+            } else if (preset === 'wifi') {
+                const chars = UPPER + LOWER + DIGITS;
+                const len = 16 + Math.floor(Math.random() * 8);
+                for (let i = 0; i < len; i++) password += randChar(chars);
+            } else if (preset === 'api') {
+                const len = 32 + Math.floor(Math.random() * 32);
+                for (let i = 0; i < len; i++) password += randChar(HEX);
+            } else if (preset === 'recovery') {
+                const words = [];
+                for (let i = 0; i < 12; i++) words.push(WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)]);
+                password = words.join(' ');
+            }
+            state.currentPassword.preset = password;
+            displayPassword('preset', password);
+            updateStrength(password);
+            const presetNames = { pin: 'PIN', wifi: 'Wi-Fi', api: 'API-ключ', recovery: 'Фраза' };
+            addToHistory(presetNames[preset], password, state.currentExpire.preset);
+            hideQR('preset');
+        }
+
+        function refreshPreset() {
+            const btn = event.currentTarget;
+            btn.classList.add('spin');
+            setTimeout(() => btn.classList.remove('spin'), 500);
+            generatePreset();
+        }
+
+        function toggleQR(type) {
+            const container = document.getElementById('qr-' + type);
+            const password = state.currentPassword[type];
+            if (!password) { showToast('Сначала сгенерируйте пароль'); return; }
+            if (container.style.display === 'none') {
+                container.innerHTML = '';
+                new QRCode(container, {
+                    text: password, width: 180, height: 180,
+                    colorDark: '#000000', colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                container.style.display = 'flex';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function hideQR(type) { document.getElementById('qr-' + type).style.display = 'none'; }
+
+        function generateMnemonic(password) {
+            if (!password) return '';
+            const parts = [];
+            const chars = password.split('');
+            const limit = Math.min(chars.length, 10);
+            for (let i = 0; i < limit; i++) {
+                const c = chars[i];
+                const lower = c.toLowerCase();
+                const word = MNEMONIC_WORDS[lower] || `символ "${c}"`;
+                parts.push(word);
+            }
+            if (chars.length > 10) parts.push('...');
+            return `Запомните как: <strong>${parts.join(' → ')}</strong>`;
+        }
+
+        function toggleMnemonic(type) {
+            const box = document.getElementById('mnemonic-' + type);
+            const password = state.currentPassword[type];
+            if (!password) { showToast('Сначала сгенерируйте пароль'); return; }
+            if (box.classList.contains('show')) {
+                box.classList.remove('show');
+            } else {
+                box.innerHTML = generateMnemonic(password);
+                box.classList.add('show');
+            }
+        }
+
+        function hideMnemonic(type) { document.getElementById('mnemonic-' + type).classList.remove('show'); }
+
+        function displayPassword(type, password) {
+            const el = document.getElementById(type + '-password');
+            el.textContent = password;
+            el.classList.remove('empty');
+            const output = document.getElementById(type + '-output');
+            output.classList.add('success');
+            setTimeout(() => output.classList.remove('success'), 600);
+        }
+
+        function copyPassword(type) {
+            const password = state.currentPassword[type];
+            if (!password) { showToast('Сначала сгенерируйте пароль'); return; }
+            navigator.clipboard.writeText(password).then(() => {
+                showToast('Скопировано');
+                const btn = document.querySelector(`#${type}-output .btn-icon:last-child`);
+                btn.classList.add('copied');
+                btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = '<i class="fa-regular fa-copy"></i>';
+                }, 1500);
+            });
+        }
+
+        function toggleCheckVisibility() {
+            const input = document.getElementById('check-input');
+            const eye = document.getElementById('check-eye');
+            if (input.type === 'password') {
+                input.type = 'text';
+                eye.className = 'fa-regular fa-eye-slash';
+            } else {
+                input.type = 'password';
+                eye.className = 'fa-regular fa-eye';
+            }
+        }
+
+        function analyzePassword() {
+            const password = document.getElementById('check-input').value;
+            const result = document.getElementById('check-result');
+            if (!password) { showToast('Введите пароль'); return; }
+            result.classList.add('show');
+
+            const len = password.length;
+            const lenEl = document.getElementById('check-length');
+            lenEl.textContent = len + ' символов';
+            lenEl.className = 'check-value ' + (len >= 12 ? 'good' : len >= 8 ? 'warn' : 'bad');
+
+            let poolSize = 0;
+            if (/[a-z]/.test(password)) poolSize += 26;
+            if (/[A-Z]/.test(password)) poolSize += 26;
+            if (/[0-9]/.test(password)) poolSize += 10;
+            if (/[^a-zA-Z0-9]/.test(password)) poolSize += 32;
+            const entropy = Math.round(len * Math.log2(poolSize || 1));
+            const entropyEl = document.getElementById('check-entropy');
+            entropyEl.textContent = entropy + ' бит';
+            entropyEl.className = 'check-value ' + (entropy >= 80 ? 'good' : entropy >= 50 ? 'warn' : 'bad');
+
+            const combinations = Math.pow(poolSize || 1, len);
+            const seconds = combinations / 1e10 / 2;
+            const timeEl = document.getElementById('check-time');
+            timeEl.textContent = formatCrackTime(seconds);
+            timeEl.className = 'check-value ' + (seconds > 3.15e9 ? 'good' : seconds > 86400 ? 'warn' : 'bad');
+
+            const scoreEl = document.getElementById('check-score');
+            let score = 0;
+            if (len >= 8) score++; if (len >= 12) score++; if (len >= 16) score++;
+            if (/[a-z]/.test(password)) score++; if (/[A-Z]/.test(password)) score++;
+            if (/[0-9]/.test(password)) score++; if (/[^a-zA-Z0-9]/.test(password)) score++;
+            const labels = ['Очень слабый', 'Слабый', 'Средний', 'Хороший', 'Надёжный', 'Отличный', 'Превосходный', 'Идеальный'];
+            scoreEl.textContent = labels[score];
+            scoreEl.className = 'check-value ' + (score >= 6 ? 'good' : score >= 4 ? 'warn' : 'bad');
+
+            const issues = [];
+            if (len < 8) issues.push('Слишком короткий (менее 8 символов)');
+            if (/^[a-z]+$|^[A-Z]+$|^[0-9]+$/.test(password)) issues.push('Использует только один тип символов');
+            if (/123|234|345|456|567|678|789|abc|bcd|cde|qwe|asd|zxc/i.test(password)) issues.push('Содержит последовательности (123, abc, qwe...)');
+            if (/(.)\1{2,}/.test(password)) issues.push('Есть повторяющиеся символы подряд');
+            if (/^(password|12345|qwerty|admin)/i.test(password)) issues.push('Начинается с распространённого шаблона');
+            const uniqueChars = new Set(password).size;
+            if (uniqueChars < len * 0.5) issues.push('Много повторяющихся символов');
+
+            const issuesEl = document.getElementById('check-issues');
+            if (issues.length > 0) {
+                issuesEl.style.display = 'block';
+                issuesEl.innerHTML = issues.map(i => `<div class="issue-item"><i class="fa-solid fa-triangle-exclamation"></i><span>${i}</span></div>`).join('');
+            } else {
+                issuesEl.style.display = 'none';
+            }
+            document.getElementById('hibp-status').style.display = 'none';
+        }
+
+        function formatCrackTime(seconds) {
+            if (!isFinite(seconds) || seconds > 1e20) return 'практически вечность';
+            if (seconds < 0.001) return 'мгновенно';
+            if (seconds < 1) return 'доли секунды';
+            if (seconds < 60) return Math.round(seconds) + ' сек';
+            if (seconds < 3600) return Math.round(seconds / 60) + ' мин';
+            if (seconds < 86400) return Math.round(seconds / 3600) + ' ч';
+            if (seconds < 3.15e7) return Math.round(seconds / 86400) + ' дн';
+            if (seconds < 3.15e9) return Math.round(seconds / 3.15e7) + ' лет';
+            if (seconds < 3.15e12) return Math.round(seconds / 3.15e9) + ' тыс. лет';
+            if (seconds < 3.15e15) return Math.round(seconds / 3.15e12) + ' млн лет';
+            return Math.round(seconds / 3.15e15) + ' млрд лет';
+        }
+
+        async function sha1(text) {
+            const buffer = new TextEncoder().encode(text);
+            const hash = await crypto.subtle.digest('SHA-1', buffer);
+            const arr = Array.from(new Uint8Array(hash));
+            return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function checkHIBP() {
+            const password = document.getElementById('check-input').value;
+            const result = document.getElementById('check-result');
+            const status = document.getElementById('hibp-status');
+            const text = document.getElementById('hibp-text');
+            if (!password) { showToast('Введите пароль'); return; }
+
+            result.classList.add('show');
+            status.style.display = 'flex';
+            status.className = 'hibp-status loading';
+            text.innerHTML = '<span class="loading" style="display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--text);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span>Проверяем базу утечек...';
+
+            try {
+                const hash = await sha1(password);
+                const prefix = hash.slice(0, 5).toUpperCase();
+                const suffix = hash.slice(5).toUpperCase();
+                const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
+                if (!response.ok) throw new Error('API error');
+                const data = await response.text();
+                const found = data.split('\n').find(line => line.startsWith(suffix));
+                if (found) {
+                    const count = parseInt(found.split(':')[1].trim());
+                    status.className = 'hibp-status danger';
+                    text.innerHTML = `<i class="fa-solid fa-circle-exclamation" style="color: var(--danger);"></i> <strong>Найден в ${count.toLocaleString('ru-RU')}</strong> утечках! Срочно смените пароль.`;
+                } else {
+                    status.className = 'hibp-status safe';
+                    text.innerHTML = `<i class="fa-solid fa-check-circle" style="color: var(--success);"></i> В известных утечках не найден`;
+                }
+            } catch (e) {
+                status.className = 'hibp-status loading';
+                text.innerHTML = `<i class="fa-solid fa-circle-exclamation" style="color: var(--warning);"></i> Не удалось проверить. Проверьте интернет.`;
+            }
+        }
+
+        const HISTORY_KEY = 'passgen_history_v3';
+        const MAX_HISTORY = 20;
+
+        function loadHistory() {
+            try {
+                const data = localStorage.getItem(HISTORY_KEY);
+                state.history = data ? JSON.parse(data) : [];
+            } catch (e) { state.history = []; }
+        }
+
+        function saveHistory() {
+            try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch (e) {}
+        }
+
+        function addToHistory(type, password, days) {
+            state.history.unshift({
+                type, password, time: Date.now(),
+                expireDays: days,
+                expiresAt: days > 0 ? Date.now() + days * 86400000 : 0
+            });
+            if (state.history.length > MAX_HISTORY) state.history = state.history.slice(0, MAX_HISTORY);
+            saveHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            const count = document.getElementById('history-count');
+            count.textContent = `${state.history.length} ${pluralize(state.history.length, 'запись', 'записи', 'записей')}`;
+            if (state.history.length === 0) {
+                list.innerHTML = '<div class="history-empty">История пуста</div>';
+                return;
+            }
+            const now = Date.now();
+            list.innerHTML = state.history.map((item, idx) => {
+                let expireClass = 'ok', expireText = '';
+                if (item.expiresAt > 0) {
+                    const left = item.expiresAt - now;
+                    if (left < 0) { expireClass = 'bad'; expireText = 'Просрочен'; }
+                    else if (left < 7 * 86400000) { expireClass = 'warn'; expireText = `Осталось ${Math.ceil(left / 86400000)} дн`; }
+                    else { expireText = `Ещё ${Math.ceil(left / 86400000)} дн`; }
+                } else { expireText = 'Бессрочно'; }
+                const itemClass = expireClass === 'bad' ? 'expired' : expireClass === 'warn' ? 'expiring' : '';
+                return `
+                    <div class="history-item ${itemClass}">
+                        <div class="history-meta">
+                            <div class="history-type">${escapeHtml(item.type)}</div>
+                            <div class="history-password">${escapeHtml(item.password)}</div>
+                            <div class="history-time">${formatTime(item.time)}</div>
+                            <div class="history-expire ${expireClass}"><i class="fa-regular fa-clock"></i> ${expireText}</div>
+                        </div>
+                        <button class="btn-icon" onclick="copyHistoryItem(${idx})" title="Копировать"><i class="fa-regular fa-copy"></i></button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function copyHistoryItem(idx) {
+            const item = state.history[idx];
+            if (!item) return;
+            navigator.clipboard.writeText(item.password).then(() => showToast('Скопировано'));
+        }
+
+        function clearHistory() {
+            if (state.history.length === 0) return;
+            if (confirm('Очистить историю?')) {
+                state.history = [];
+                saveHistory();
+                renderHistory();
+                showToast('История очищена');
+            }
+        }
+
+        function formatTime(ts) {
+            const diff = (Date.now() - ts) / 1000;
+            if (diff < 60) return 'только что';
+            if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
+            return new Date(ts).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function pluralize(n, one, two, five) {
+            n = Math.abs(n) % 100;
+            const n1 = n % 10;
+            if (n > 10 && n < 20) return five;
+            if (n1 > 1 && n1 < 5) return two;
+            if (n1 === 1) return one;
+            return five;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        let toastTimer = null;
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        loadHistory();
+        generateQuick();
+    </script>
+</body>
+</html>В
